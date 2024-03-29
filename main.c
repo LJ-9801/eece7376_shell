@@ -132,6 +132,8 @@ void ReadCommand(char *line, struct Command *command) {
 
 }
 
+
+// @todo: no need for this function
 // function to print out command data structure
 void PrintCommand(struct Command *command) {
 
@@ -183,7 +185,8 @@ void ExecuteCommand(struct Command *command) {
         execvp(command->sub_commands[0].argv[0], command->sub_commands[0].argv);
 
         // if execvp returns, an error occurred
-        perror("execvp");
+        char *err = command->sub_commands[0].argv[0];
+        printf("%s: Command not found\n", err);
         exit(EXIT_FAILURE);
     } else { // parent process
         
@@ -215,6 +218,11 @@ int main() {
 
         // read input from user
         fgets(line, sizeof(line), stdin);
+
+        // if we enter a enter key, continue
+        if (line[0] == '\n') {
+            continue;
+        }
 
         // remove newline character from input
         line[strcspn(line, "\n")] = '\0';
