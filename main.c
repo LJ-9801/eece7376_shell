@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <sys/wait.h>
+#include <signal.h>
 
 #define MAX_SUB_COMMANDS 5
 #define MAX_ARGS 10
@@ -205,6 +206,50 @@ void ExecuteCommand(struct Command *command) {
     }
 }
 
+void handle_sigchld(int sig) {
+    // wait for all dead processes
+    // we use a non-blocking call to waitpid (WNOHANG) to avoid blocking if a child was created
+    // with fork() but has not yet exited.
+    while (waitpid(-1, NULL, WNOHANG) > 0) {
+    }
+}
+
+
+void pipeline_command(struct Command *command){
+    int fd[2];
+    pid_t pid;
+    int in = 0;
+    int i;
+
+    for (i = 0; i < command->num_sub_commands; i++) {
+        pipe(fd);
+        pid = fork();
+        if (pid == 0) {
+            dup2(in, 0); //change the input according to the old one
+            if (i < command->num_sub_commands - 1) {
+                dup2(fd[1], 1);
+            }
+            close(fd[0]);
+            execvp(command->sub_commands[i].argv[0], command->sub_commands[i].argv);
+
+            // if execvp returns, an error occurred
+            char *err = command->sub_commands[i].argv[0];
+            printf("%s: Command not found\n", err);
+            exit(1);
+        } else {
+            if(command->background){
+                if(i == command->num_sub_commands - 1){
+                    printf("[%d]\n", pid);
+                }
+            } else{
+                waitpid(pid, NULL, 0);
+            }
+            close(fd[1]);
+            in = fd[0];
+        }
+    }
+}
+
 int main() {
     
     // declare variables
@@ -235,8 +280,15 @@ int main() {
         // read command from input
         ReadCommand(line, &command);
 
+        // PrintCommand(&command);
+
+        pipeline_command(&command);
+
+        // kill all zombies
+        signal(SIGCHLD, handle_sigchld);
+
         // execute command
-        ExecuteCommand(&command);
+        // ExecuteCommand(&command);
     }
 
         return 0;
