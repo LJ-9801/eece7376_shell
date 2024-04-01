@@ -4,6 +4,7 @@
 #include <string.h>
 #include <sys/wait.h>
 #include <signal.h>
+#include <fcntl.h>
 
 #define MAX_SUB_COMMANDS 5
 #define MAX_ARGS 10
@@ -182,6 +183,52 @@ void ExecuteCommand(struct Command *command) {
         exit(EXIT_FAILURE);
     } else if (pid == 0) { // child process
 
+        // handle input redirection
+        if (command->stdin_redirect != NULL) {
+
+            // open file in read-only mode
+            int fd = open(command->stdin_redirect, O_RDONLY);
+
+            // check if file opened successfully
+            if (fd == -1) {
+                perror("open");
+                exit(EXIT_FAILURE);
+            }
+
+            // redirect stdin to file
+            if (dup2(fd, STDIN_FILENO) == -1) {
+                perror("dup2");
+                exit(EXIT_FAILURE);
+            }
+
+            // close file
+            close(fd);
+        }
+
+        // handle output redirection
+        if (command->stdout_redirect != NULL) {
+
+            printf("Redirecting stdout to %s\n", command->stdout_redirect);
+
+            // open file in write-only mode, create if it doesn't exist, truncate if it does
+            int fd = open(command->stdout_redirect, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+
+            // check if file opened successfully
+            if (fd == -1) {
+                perror("open");
+                exit(EXIT_FAILURE);
+            }
+
+            // redirect stdout to file
+            if (dup2(fd, STDOUT_FILENO) == -1) {
+                perror("dup2");
+                exit(EXIT_FAILURE);
+            }
+
+            // close file
+            close(fd);
+        }
+
         // execute the command
         execvp(command->sub_commands[0].argv[0], command->sub_commands[0].argv);
 
@@ -280,15 +327,15 @@ int main() {
         // read command from input
         ReadCommand(line, &command);
 
-        // PrintCommand(&command);
+        PrintCommand(&command);
 
-        pipeline_command(&command);
+        // pipeline_command(&command);
 
         // kill all zombies
-        signal(SIGCHLD, handle_sigchld);
+        // signal(SIGCHLD, handle_sigchld);
 
         // execute command
-        // ExecuteCommand(&command);
+        ExecuteCommand(&command);
     }
 
         return 0;
