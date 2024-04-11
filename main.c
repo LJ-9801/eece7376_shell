@@ -172,87 +172,6 @@ void PrintCommand(struct Command *command) {
 
 }
 
-// function to execute a command with its arguments
-void ExecuteCommand(struct Command *command) {
-    // create a child process
-    pid_t pid = fork();
-
-    if (pid == -1) {
-        // error occurred while forking
-        perror("fork");
-        exit(EXIT_FAILURE);
-    } else if (pid == 0) { // child process
-
-        // handle input redirection
-        if (command->stdin_redirect != NULL) {
-
-            // open file in read-only mode
-            int fd = open(command->stdin_redirect, O_RDONLY);
-
-            // check if file opened successfully
-            if (fd == -1) {
-                perror("open");
-                exit(EXIT_FAILURE);
-            }
-
-            // redirect stdin to file
-            if (dup2(fd, STDIN_FILENO) == -1) {
-                perror("dup2");
-                exit(EXIT_FAILURE);
-            }
-
-            // close file
-            close(fd);
-        }
-
-        // handle output redirection
-        if (command->stdout_redirect != NULL) {
-
-            printf("Redirecting stdout to %s\n", command->stdout_redirect);
-
-            // open file in write-only mode, create if it doesn't exist, truncate if it does
-            int fd = open(command->stdout_redirect, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-
-            // check if file opened successfully
-            if (fd == -1) {
-                perror("open");
-                exit(EXIT_FAILURE);
-            }
-
-            // redirect stdout to file
-            if (dup2(fd, STDOUT_FILENO) == -1) {
-                perror("dup2");
-                exit(EXIT_FAILURE);
-            }
-
-            // close file
-            close(fd);
-        }
-
-        // execute the command
-        execvp(command->sub_commands[0].argv[0], command->sub_commands[0].argv);
-
-        // if execvp returns, an error occurred
-        char *err = command->sub_commands[0].argv[0];
-        printf("%s: Command not found\n", err);
-        exit(EXIT_FAILURE);
-    } else { // parent process
-        
-        // wait for the child process to complete
-        int status;
-        if (waitpid(pid, &status, 0) == -1) {
-            perror("waitpid");
-            exit(EXIT_FAILURE);
-        }
-
-        // check if the child process exited normally
-        if (WIFEXITED(status)) {
-            int exit_status = WEXITSTATUS(status);
-        }
-
-    }
-}
-
 void handle_sigchld(int sig) {
     // wait for all dead processes
     // we use a non-blocking call to waitpid (WNOHANG) to avoid blocking if a child was created
@@ -262,7 +181,7 @@ void handle_sigchld(int sig) {
 }
 
 
-void pipeline_command(struct Command *command){
+void ExecuteCommand(struct Command *command){
     int fd[2];
     pid_t pid;
     int in = 0;
@@ -272,6 +191,49 @@ void pipeline_command(struct Command *command){
         pipe(fd);
         pid = fork();
         if (pid == 0) {
+            if (i == 0 && command->stdin_redirect != NULL) {
+
+                // open file in read-only mode
+                int fd = open(command->stdin_redirect, O_RDONLY);
+
+                // check if file opened successfully
+                if (fd == -1) {
+                    perror("open");
+                    exit(EXIT_FAILURE);
+                }
+
+                // redirect stdin to file
+                if (dup2(fd, STDIN_FILENO) == -1) {
+                    perror("dup2");
+                    exit(EXIT_FAILURE);
+                }
+
+                // close file
+                close(fd);
+            }
+
+                    // handle output redirection
+            if (i == command->num_sub_commands - 1 && command->stdout_redirect != NULL) {
+
+                // open file in write-only mode, create if it doesn't exist, truncate if it does
+                int fd = open(command->stdout_redirect, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+
+                // check if file opened successfully
+                if (fd == -1) {
+                    perror("open");
+                    exit(EXIT_FAILURE);
+                }
+
+                // redirect stdout to file
+                if (dup2(fd, STDOUT_FILENO) == -1) {
+                    perror("dup2");
+                    exit(EXIT_FAILURE);
+                }
+
+                // close file
+                close(fd);
+            }
+
             dup2(in, 0); //change the input according to the old one
             if (i < command->num_sub_commands - 1) {
                 dup2(fd[1], 1);
@@ -327,15 +289,12 @@ int main() {
         // read command from input
         ReadCommand(line, &command);
 
-        PrintCommand(&command);
+        //PrintCommand(&command);
 
-        // pipeline_command(&command);
+        ExecuteCommand(&command);
 
         // kill all zombies
-        // signal(SIGCHLD, handle_sigchld);
-
-        // execute command
-        ExecuteCommand(&command);
+        signal(SIGCHLD, handle_sigchld);
     }
 
         return 0;
