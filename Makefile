@@ -1,7 +1,7 @@
 CC=gcc
 DEPS = $(wildcard src/*.h)
 OBJ = $(patsubst %.c, %.o, $(wildcard *.c))
-EXECUTABLE=main
+EXECUTABLE=shell
 
 %.o: %.c $(DEPS)
 	$(CC) -c -o $@ $< $(CFLAGS)
